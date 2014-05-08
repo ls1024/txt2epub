@@ -2,9 +2,8 @@
 # coding:utf-8
 
 #
-# Turn a Siyavula cnxmlplus.html book repo into an epub file.
-# Assume each cnxmlplus file has been converted to html,
-# and contains a chapter
+# Convert Chinese novel text file into an epub file.
+# Assume each chapter has been converted to html,
 
 import sys
 import os
@@ -21,7 +20,7 @@ from docopt import docopt
 # uncomment to debug
 #import pudb; pu.db
 
-usage_info = """Usage: bookrepo2epub.py  --output <outputfolder>  --name <name> | --help
+usage_info = """Usage: txt2epub.py  --output <outputfolder>  --name <name> | --help
 
 
 Arguments:
@@ -94,19 +93,13 @@ if __name__ == "__main__":
                     if linenum <> 0 and not frontpage :
                         frontpage = 1
                         chaptername = '<h2>前言</h2>'                    
-                    #chapterfiles.append(chaptercontent)
-                    #chapters.append((chaptername, chaptercontent))
                     chapters.append((chaptername, chaptercontent))
-                    #chapters[chapternum][0] = chaptername
-                    #chapters[chapternum][1] = chaptercontent
                     chapternum += 1
                     chaptercontent = ''
             else:
                 chaptercontent += '<p>'+line+'</p>\n'
 
     chapters.append((chaptername, chaptercontent))
-    #chapters[chapternum][0] = chaptername
-    #chapters[chapternum][1] = chaptercontent
 
     for chapternum, chapter in enumerate(chapters):
         makechapterhtml(outputfolder, chapter, chapternum)
