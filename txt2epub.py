@@ -82,15 +82,14 @@ def is_chapter_title(line):
 
 def makechapterhtml(filepath, chapter, chapnum):
     filepath = os.path.join(filepath, 'EPUB') 
-    with open(os.path.join(filepath, '{:0>4d}.html'.format(chapnum)), 'w') as f:
+    with open(os.path.join(filepath, '{:0>4d}.xhtml'.format(chapnum)), 'w') as f:
         f.write(r'<?xml version="1.0" encoding="UTF-8"?>')
-        f.write("""<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="zh-CN">
-<head>
-<title>"""+bookname+"""</title>
-<meta content="http://www.w3.org/1999/xhtml; charset=utf-8" http-equiv="Content-Type"/>
-<link rel="stylesheet" href="stylesheet.css" type="text/css" />
-</head>
-<body>
+        f.write("""<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+  <head>
+  <title>"""+bookname+"""</title>
+  <link rel="stylesheet" href="stylesheet.css" type="text/css" />
+  </head>
+  <body>
 """)
         f.write('<h2>' + chapter[0] + '</h2>\n')
         f.write(chapter[1] + '\n')
@@ -105,6 +104,7 @@ def writeopffile(filepath, manifest, spine):
         <dc:title>%(bname)s</dc:title>
         <dc:creator>Andy Lau</dc:creator>
         <dc:language>en</dc:language>
+        <meta property="dcterms:modified">%(moditime)s</meta>
     </metadata>
     <manifest>
         %(manifest)s
@@ -114,13 +114,17 @@ def writeopffile(filepath, manifest, spine):
     </spine>
 </package>'''
 
+    currenttime = time.strftime('%Y-%m-%dT%H:%M:%SZ',time.localtime())
+
     with open(os.path.join(filepath, 'content.opf'), 'w') as f:
         f.write(index_tpl % {
             'bname': bookname,
+            'moditime': currenttime,
             'manifest': manifest,
             'spine': spine,
         })
 
+#EPUB2 NCX file, abandoned in EPUB3
 def writencxfile(filepath, navpoint):
     index_ncx = '''<?xml version="1.0" encoding="UTF-8"?>
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
@@ -142,6 +146,33 @@ def writencxfile(filepath, navpoint):
         f.write(index_ncx % {
             'bname': bookname,
             'navpoint': navpoint,
+        })
+
+#EPUB3 END file
+def writenavfile(filepath, olli):
+    index_nav = '''<html xmlns="http://www.w3.org/1999/xhtml" 
+      xmlns:epub="http://www.idpf.org/2007/ops">
+  <head>
+    <title>%(bname)s</title>
+  </head>
+  <body>
+    <section epub:type="frontmatter toc">
+      <header>
+        <h1>目  录</h1>
+      </header>
+      <nav epub:type="toc" id="toc">
+      <ol>
+        %(olli)s
+      </ol>
+      </nav>
+    </section>
+  </body>
+</html>'''
+
+    with open(os.path.join(filepath, 'nav.xhtml'), 'w') as f:
+        f.write(index_nav % {
+            'bname': bookname,
+            'olli': olli,
         })
 
 
@@ -192,7 +223,7 @@ if __name__ == "__main__":
                     chaptername = line
                     if linenum <> 0 and not frontpage :
                         frontpage = 1
-                        pre_chap_title = '前言'
+                        pre_chap_title = '前  言'
 
                     if frontpage :
                         chapters.append((pre_chap_title, chaptercontent))
@@ -204,28 +235,43 @@ if __name__ == "__main__":
 
     chapters.append((chaptername, chaptercontent))
 
+#        EPUB2, abandon in EPUB3
     manifest = '<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>\n'
+    manifest += '<item id="toc" properties="nav" href="nav.xhtml" media-type="application/xhtml+xml"/>\n'
     spine = ''
+    olli = ''
+
+#        EPUB2, abandon in EPUB3
     navpoint = ''
 
     for chapternum, chapter in enumerate(chapters):
         makechapterhtml(outputfolder, chapter, chapternum)
-        manifest += '<item id="chapter_{:0>4d}" href="/EPUB/{:0>4d}.html" media-type="application/xhtml+xml"/>\n'.format(chapternum, chapternum)
+        manifest += '<item id="chapter_{:0>4d}" href="EPUB/{:0>4d}.xhtml" media-type="application/xhtml+xml"/>\n'.format(chapternum, chapternum)
         spine += '<itemref idref="chapter_{:0>4d}" />\n'.format(chapternum)
 
+        olli += '''        <li id="chapter_{:0>4d}">
+          <a href="EPUB/{:0>4d}.xhtml">{chaptitle}</a>
+        </li>
+          '''.format(chapternum, chapternum, chaptitle = chapter[0])
+
+#        EPUB2, abandon in EPUB3
         navpoint += '''  <navPoint class="chapter" id="chapter_{seq}" playOrder="{chapnum}">
     <navLabel>
       <text>{chaptitle}</text>
     </navLabel>
-    <content src="/EPUB/{seq}.html"/>
+    <content src="EPUB/{seq}.xhtml"/>
   </navPoint>
 '''.format(seq = '{:0>4d}'.format(chapternum), chaptitle = chapter[0], chapnum = chapternum)
 
     #write package.opf
     writeopffile(outputfolder, manifest, spine)
 
+#   EPUB2, abandon in EPUB3
     #write toc.ncx
     writencxfile(outputfolder, navpoint)
+
+    #write nav.xhtml
+    writenavfile(outputfolder, olli)
 
     #write container.xml
     epubfolder = arguments['<outputfolder>']
