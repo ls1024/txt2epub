@@ -18,6 +18,7 @@ from lxml import etree
 from docopt import docopt
 
 # uncomment to debug
+#import logging
 #import pudb; pu.db
 
 usage_info = """Usage: txt2epub.py  --output <outputfolder>  --name <name> | --help
@@ -65,14 +66,14 @@ def makechapterhtml(filepath, chapter, chapnum):
 </head>
 <body>
 """)
-        f.write(chapter[0] + '\n')
+        f.write('<h2>' + chapter[0] + '</h2>\n')
         f.write(chapter[1] + '\n')
         f.write("""</body>
 </html>""")
         f.close()
 
 def writeopffile(filepath, manifest, spine):
-    index_tpl = '''<package version="2.0" xmlns="http://www.idpf.org/2007/opf">
+    index_tpl = '''<package version="3.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="uid">
     <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
         <dc:identifier id="uid">Andy Lau txt2epub.1.0</dc:identifier>
         <dc:title>%(bname)s</dc:title>
@@ -129,14 +130,14 @@ def make_container(docoptions):
         try:
             container = etree.parse(containerpath)
         except etree.XMLSyntaxError:
-            container = etree.XML('<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles>\n</rootfiles></container>')
+            container = etree.XML('<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0""><rootfiles>\n</rootfiles></container>')
     else:
-        container = etree.XML('<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles>\n</rootfiles></container>')
+        container = etree.XML('<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0"><rootfiles>\n</rootfiles></container>')
 
     packagefilepath = "content.opf"
     current_rootfiles = [r.attrib['full-path'] for r in container.findall('.//{urn:oasis:names:tc:opendocument:xmlns:container}rootfile')]
     if packagefilepath not in current_rootfiles:
-        rootfile = etree.Element('rootfile', attrib={'media-type':"application/oebps-package+xml", 'version':'1.0', 'full-path':packagefilepath})
+        rootfile = etree.Element('rootfile', attrib={'media-type':"application/oebps-package+xml", 'full-path':packagefilepath})
         rootfile.tail = '\n'
         container.find('.//{urn:oasis:names:tc:opendocument:xmlns:container}rootfiles').append(rootfile)
 
@@ -152,6 +153,7 @@ if __name__ == "__main__":
     chapters = []
     chaptercontent = ''
     chaptername = ''
+    pre_chap_title = ''
     frontpage = 0
 
     bookfile = open('{bname}.txt'.format(bname = bookname),'r')
@@ -159,11 +161,16 @@ if __name__ == "__main__":
         line = line.strip()
         if  len(line):
             if is_chapter_title(line):
-                    chaptername = '<h2>'+line+'</h2>'
+                    pre_chap_title = chaptername
+                    chaptername = line
                     if linenum <> 0 and not frontpage :
                         frontpage = 1
-                        chaptername = '<h2>前言</h2>'                    
-                    chapters.append((chaptername, chaptercontent))
+                        pre_chap_title = '前言'
+
+                    if frontpage :
+                        chapters.append((pre_chap_title, chaptercontent))
+                    else:                    
+                        chapters.append((chaptername, chaptercontent))
                     chaptercontent = ''
             else:
                 chaptercontent += '<p>'+line+'</p>\n'
@@ -179,13 +186,13 @@ if __name__ == "__main__":
         manifest += '<item id="chapter_{:0>4d}" href="/EPUB/{:0>4d}.html" media-type="application/xhtml+xml"/>\n'.format(chapternum, chapternum)
         spine += '<itemref idref="chapter_{:0>4d}" />\n'.format(chapternum)
 
-        navpoint += '''  <navPoint class="chapter" id="chapter_{seq}" playOrder="{seq}">
+        navpoint += '''  <navPoint class="chapter" id="chapter_{seq}" playOrder="{chapnum}">
     <navLabel>
       <text>{chaptitle}</text>
     </navLabel>
     <content src="/EPUB/{seq}.html"/>
   </navPoint>
-'''.format(seq = '{:0>4d}'.format(chapternum), chaptitle = chapter[0])
+'''.format(seq = '{:0>4d}'.format(chapternum), chaptitle = chapter[0], chapnum = chapternum)
 
     #write package.opf
     writeopffile(outputfolder, manifest, spine)
@@ -210,11 +217,18 @@ if __name__ == "__main__":
     out = zipfile.ZipFile(os.path.join(epubfolder, '{bname}.epub'.format(bname = bookname)), "w", zipfile.ZIP_DEFLATED)
     out.write(epubfolder + "/mimetype", "mimetype", zipfile.ZIP_STORED)
     
-    for root, dirs, files in os.walk(os.path.join(epubfolder,'.')):  
+    for root, dirs, files in os.walk(epubfolder):  
         for name in files:  
             if name <> 'mimetype' :
                fname = os.path.join(root, name)
                new_path = os.path.normpath(fname.replace(epubfolder,''))
-               out.write(fname, new_path)  
+               out.write(fname, new_path)
+    #for p in os.listdir(epubfolder):
+    #    if os.path.isdir(p):
+    #        for f in os.listdir(p):
+    #            logging.warning("Writing file '%s/%s'" % (p, f))
+    #            out.write(os.path.join(p, f), zipfile.ZIP_DEFLATED)
+    #    else:
+    #        out.write(os.path.join(epubfolder, p))
 
     out.close()
